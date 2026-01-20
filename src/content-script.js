@@ -262,7 +262,12 @@
         return false;
       }
       const candidateTokens = ['MP3', 'WAV', 'Video'];
-      return candidateTokens.some((token) => el.textContent.includes(token));
+      if (candidateTokens.some((token) => el.textContent.includes(token))) {
+        return true;
+      }
+      const nodes = Array.from(el.querySelectorAll('button, [role="menuitem"], [role="option"], [role="link"]'));
+      const hasLabels = nodes.some((node) => node.textContent && node.textContent.trim());
+      return nodes.length >= 2 && hasLabels;
     }
 
     findDownloadTrigger(menu) {

@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Suno Create Download Pills",
+  "description": "Adds persistent Download pills next to each clip action row on https://suno.com/create.",
+  "version": "1.0.0",
+  "content_scripts": [
+    {
+      "matches": [
+        "https://suno.com/create",
+        "https://suno.com/create/*"
+      ],
+      "js": [
+        "src/content-script.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "activeTab"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "suno-create-download@example.com"
+    }
+  }
+}

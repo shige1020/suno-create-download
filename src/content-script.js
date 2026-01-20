@@ -165,6 +165,7 @@
       if (!container) {
         return;
       }
+      const clipRow = shareBtn.closest(CLIP_ROW_SELECTOR);
       const pillContainer = document.createElement('div');
       pillContainer.className = PILL_CONTAINER_CLASS;
       pillContainer.setAttribute('aria-live', 'polite');
@@ -172,11 +173,12 @@
 
       const context = {
         shareButton: shareBtn,
+        clipRow,
         actionContainer: container,
         pillContainer,
         options: [],
         loading: false,
-        menuButton: this.findMenuButton(container, shareBtn),
+        menuButton: this.findMenuButton(clipRow, container, shareBtn),
         error: null,
       };
 
@@ -220,6 +222,7 @@
       if (context.loading) {
         return;
       }
+      context.menuButton = this.getMenuButton(context);
       if (!context.menuButton) {
         this.renderFallback(context, 'Menu button not found');
         return;
@@ -229,6 +232,7 @@
         return;
       }
       context.loading = true;
+      context.error = null;
       this.renderPlaceholder(context, { label: 'Loading…', disabled: true });
       this.fetchDownloadOptions(context)
         .then((options) => {
@@ -243,46 +247,51 @@
         })
         .finally(() => {
           context.loading = false;
-          if (!context.options.length) {
+          if (!context.options.length && !context.error) {
             this.renderPlaceholder(context, { label: 'Download' });
           }
         });
     }
 
-    findMenuButton(container, shareBtn) {
-      const contextButtons = Array.from(container.querySelectorAll('button[data-context-menu-trigger="true"]'));
-      const candidate = contextButtons.find((btn) => {
-        const label = (btn.getAttribute('aria-label') || '').toLowerCase();
-        return !label.includes('remix');
-      }) || contextButtons[0];
-      if (candidate) {
-        return candidate;
+    getMenuButton(context) {
+      if (context.menuButton && context.menuButton.isConnected) {
+        return context.menuButton;
       }
-      const candidates = Array.from(container.querySelectorAll('button'));
-      let fallback = null;
-      for (const button of candidates) {
-        if (button === shareBtn) {
-          continue;
-        }
-        const label = (button.getAttribute('aria-label') || button.textContent || '').toLowerCase();
-        if (
-          label.includes('more') ||
-          label.includes('menu') ||
-          label.includes('options') ||
-          label.includes('clip') ||
-          label.includes('actions')
-        ) {
-          return button;
-        }
-        if (button.getAttribute('aria-haspopup')) {
-          fallback = fallback || button;
+      const clipRow = context.shareButton.closest(CLIP_ROW_SELECTOR);
+      const fresh = this.findMenuButton(clipRow, context.actionContainer, context.shareButton);
+      context.menuButton = fresh;
+      return fresh;
+    }
+
+    findMenuButton(clipRow, container, shareBtn) {
+      const scopes = [clipRow, container].filter(Boolean);
+      for (const scope of scopes) {
+        const contextButtons = Array.from(scope.querySelectorAll('button[data-context-menu-trigger="true"]'));
+        const candidate = contextButtons.find((btn) => {
+          const label = (btn.getAttribute('aria-label') || btn.textContent || '').toLowerCase();
+          return !label.includes('remix') && !label.includes('edit');
+        }) || contextButtons[0];
+        if (candidate) {
+          return candidate;
         }
       }
-      if (fallback) {
-        return fallback;
+      for (const scope of scopes) {
+        const candidates = Array.from(scope.querySelectorAll('button'));
+        for (const button of candidates) {
+          if (button === shareBtn) {
+            continue;
+          }
+          const label = (button.getAttribute('aria-label') || button.textContent || '').toLowerCase();
+          if (
+            label.includes('more') ||
+            label.includes('menu') ||
+            label.includes('options')
+          ) {
+            return button;
+          }
+        }
       }
-      const preceding = candidates.filter((button) => button !== shareBtn && this.isBefore(button, shareBtn));
-      return preceding[preceding.length - 1] || null;
+      return null;
     }
 
     isBefore(elA, elB) {
@@ -290,6 +299,7 @@
     }
 
     async fetchDownloadOptions(context) {
+      context.menuButton = this.getMenuButton(context);
       if (!context.menuButton) {
         throw new Error('Menu button missing');
       }
@@ -349,13 +359,31 @@
         if (!label) {
           return;
         }
+        const normalized = this.normalizeDownloadLabel(label);
+        if (!normalized) {
+          return;
+        }
         options.push({
-          label,
+          label: normalized,
           isPro: /pro/i.test(text),
-          action: () => this.handlePillAction(context, label),
+          action: () => this.handlePillAction(context, normalized),
         });
       });
       return options;
+    }
+
+    normalizeDownloadLabel(label) {
+      const lower = label.toLowerCase();
+      if (lower.includes('mp3')) {
+        return 'MP3';
+      }
+      if (lower.includes('wav')) {
+        return 'WAV';
+      }
+      if (lower.includes('video')) {
+        return 'Video';
+      }
+      return null;
     }
 
     handlePillAction(context, label) {
@@ -441,6 +469,7 @@
     }
 
     async simulateDownloadFlow(context, label) {
+      context.menuButton = this.getMenuButton(context);
       if (!context.menuButton) {
         return;
       }

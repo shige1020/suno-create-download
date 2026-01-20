@@ -372,12 +372,23 @@
       return button;
     }
 
+    fireClick(element) {
+      if (!element) {
+        return false;
+      }
+      const init = { bubbles: true, cancelable: true, view: window };
+      ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((type) => {
+        element.dispatchEvent(new MouseEvent(type, init));
+      });
+      return true;
+    }
+
     async simulateDownloadFlow(context, label) {
       context.menuButton = this.getMenuButton(context);
       if (!context.menuButton) {
         return;
       }
-      context.menuButton.click();
+      this.fireClick(context.menuButton);
       const menu = await this.waitForPopup((el) => this.containsText(el, 'Download'), MENU_CLICK_TIMEOUT);
       if (!menu) {
         return;
@@ -386,7 +397,7 @@
       if (!downloadTrigger) {
         return;
       }
-      downloadTrigger.click();
+      this.fireClick(downloadTrigger);
       const downloadMenu = await this.waitForPopup((el) => this.containsDownloadItems(el), MENU_CLICK_TIMEOUT);
       if (!downloadMenu) {
         return;
@@ -396,7 +407,7 @@
         return text && text.trim().startsWith(label);
       });
       if (targetOption) {
-        targetOption.click();
+        this.fireClick(targetOption);
         return;
       }
       this.closeOpenMenus();

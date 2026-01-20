@@ -10,6 +10,7 @@
   const MENU_CLICK_TIMEOUT = 4000;
   const MENU_POLL_INTERVAL = 250;
   const CLIP_ROW_SELECTOR = '[data-testid="clip-row"]';
+  const FIXED_DOWNLOAD_LABELS = ['MP3', 'WAV', 'Video'];
 
   class DownloadPillManager {
     constructor() {
@@ -183,7 +184,7 @@
       };
 
       if (context.menuButton) {
-        this.renderPlaceholder(context);
+        this.renderFixedPills(context);
       } else {
         this.renderFallback(context, 'Menu button not found');
       }
@@ -200,57 +201,13 @@
       context.pillContainer.appendChild(pill);
     }
 
-    renderPlaceholder(context, { label = 'Download', disabled = false } = {}) {
-      context.pillContainer.innerHTML = '';
-      const pill = document.createElement('button');
-      pill.type = 'button';
-      pill.className = PILL_CLASS;
-      pill.textContent = label;
-      pill.disabled = disabled;
-      pill.setAttribute('aria-label', label);
-      pill.addEventListener('click', () => {
-        if (context.options.length) {
-          this.renderPills(context);
-        } else {
-          this.ensureOptions(context);
-        }
-      });
-      context.pillContainer.appendChild(pill);
-    }
-
-    ensureOptions(context) {
-      if (context.loading) {
-        return;
-      }
-      context.menuButton = this.getMenuButton(context);
-      if (!context.menuButton) {
-        this.renderFallback(context, 'Menu button not found');
-        return;
-      }
-      if (context.options.length) {
-        this.renderPills(context);
-        return;
-      }
-      context.loading = true;
-      context.error = null;
-      this.renderPlaceholder(context, { label: 'Loading…', disabled: true });
-      this.fetchDownloadOptions(context)
-        .then((options) => {
-          context.options = options;
-          this.renderPills(context);
-        })
-        .catch((error) => {
-          console.warn('Download pill introspection failed:', error);
-          context.error = error.message;
-          this.renderFallback(context, 'Download項目を取得できませんでした。Downloadから操作してください。');
-          this.showToast('Download項目を取得できませんでした。Downloadから操作してください。');
-        })
-        .finally(() => {
-          context.loading = false;
-          if (!context.options.length && !context.error) {
-            this.renderPlaceholder(context, { label: 'Download' });
-          }
-        });
+    renderFixedPills(context) {
+      context.options = FIXED_DOWNLOAD_LABELS.map((label) => ({
+        label,
+        isPro: false,
+        action: () => this.handlePillAction(context, label),
+      }));
+      this.renderPills(context);
     }
 
     getMenuButton(context) {
@@ -298,37 +255,6 @@
       return Boolean(elA.compareDocumentPosition(elB) & Node.DOCUMENT_POSITION_PRECEDING);
     }
 
-    async fetchDownloadOptions(context) {
-      context.menuButton = this.getMenuButton(context);
-      if (!context.menuButton) {
-        throw new Error('Menu button missing');
-      }
-      context.menuButton.focus();
-      context.menuButton.click();
-      try {
-        const menu = await this.waitForPopup((el) => this.containsText(el, 'Download'), MENU_CLICK_TIMEOUT);
-        if (!menu) {
-          throw new Error('Download menu did not open');
-        }
-        const downloadTrigger = this.findDownloadTrigger(menu);
-        if (!downloadTrigger) {
-          throw new Error('Download submenu trigger not found');
-        }
-        downloadTrigger.click();
-        const downloadMenu = await this.waitForPopup((el) => this.containsDownloadItems(el), MENU_CLICK_TIMEOUT);
-        if (!downloadMenu) {
-          throw new Error('Download options did not appear');
-        }
-        const options = this.parseDownloadOptions(downloadMenu, context);
-        if (!options.length) {
-          throw new Error('No download options were found');
-        }
-        return options;
-      } finally {
-        this.closeOpenMenus();
-      }
-    }
-
     containsText(el, keyword) {
       return el && el.textContent && el.textContent.includes(keyword);
     }
@@ -345,45 +271,6 @@
     findDownloadTrigger(menu) {
       const candidates = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="option"], [role="link"]'));
       return candidates.find((btn) => btn.textContent && btn.textContent.trim().startsWith('Download')) || null;
-    }
-
-    parseDownloadOptions(menu, context) {
-      const nodes = Array.from(menu.querySelectorAll('button, [role="menuitem"], [role="option"], [role="link"]'));
-      const options = [];
-      nodes.forEach((node) => {
-        const text = node.textContent;
-        if (!text) {
-          return;
-        }
-        const label = text.split('\n')[0].trim();
-        if (!label) {
-          return;
-        }
-        const normalized = this.normalizeDownloadLabel(label);
-        if (!normalized) {
-          return;
-        }
-        options.push({
-          label: normalized,
-          isPro: /pro/i.test(text),
-          action: () => this.handlePillAction(context, normalized),
-        });
-      });
-      return options;
-    }
-
-    normalizeDownloadLabel(label) {
-      const lower = label.toLowerCase();
-      if (lower.includes('mp3')) {
-        return 'MP3';
-      }
-      if (lower.includes('wav')) {
-        return 'WAV';
-      }
-      if (lower.includes('video')) {
-        return 'Video';
-      }
-      return null;
     }
 
     handlePillAction(context, label) {

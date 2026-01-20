@@ -417,6 +417,9 @@
     }
 
     findLatestPopup(predicate) {
+      if (!document.body) {
+        return null;
+      }
       const nodes = Array.from(document.body.querySelectorAll('[role="menu"],[role="listbox"],[role="dialog"], div'));
       for (let i = nodes.length - 1; i >= 0; i -= 1) {
         const node = nodes[i];

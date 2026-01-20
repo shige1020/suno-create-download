@@ -8,12 +8,13 @@
   const STYLE_ID = 'suno-download-pill-style';
   const MAX_INLINE_PILLS = 3;
   const MENU_CLICK_TIMEOUT = 4000;
-  const MENU_POLL_INTERVAL = 100;
+  const MENU_POLL_INTERVAL = 250;
 
   class DownloadPillManager {
     constructor() {
       this.mutationObserver = null;
       this.injected = false;
+      this.shareScanHandle = null;
     }
 
     start() {
@@ -119,8 +120,23 @@
       if (this.mutationObserver) {
         return;
       }
-      this.mutationObserver = new MutationObserver(() => this.scanForShareButtons());
+      this.mutationObserver = new MutationObserver(() => this.scheduleShareScan());
       this.mutationObserver.observe(document.body, { childList: true, subtree: true });
+    }
+
+    scheduleShareScan() {
+      if (this.shareScanHandle) {
+        return;
+      }
+      const run = () => {
+        this.shareScanHandle = null;
+        this.scanForShareButtons();
+      };
+      if (window.requestIdleCallback) {
+        this.shareScanHandle = requestIdleCallback(run, { timeout: 500 });
+      } else {
+        this.shareScanHandle = setTimeout(run, 250);
+      }
     }
 
     scanForShareButtons() {

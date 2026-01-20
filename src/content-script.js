@@ -261,13 +261,9 @@
       if (!el || !el.textContent) {
         return false;
       }
-      const candidateTokens = ['MP3', 'WAV', 'Video'];
-      if (candidateTokens.some((token) => el.textContent.includes(token))) {
-        return true;
-      }
-      const nodes = Array.from(el.querySelectorAll('button, [role="menuitem"], [role="option"], [role="link"]'));
-      const hasLabels = nodes.some((node) => node.textContent && node.textContent.trim());
-      return nodes.length >= 2 && hasLabels;
+      const candidateTokens = ['download', 'mp3', 'wav', 'video', 'audio'];
+      const text = el.textContent.toLowerCase();
+      return candidateTokens.some((token) => text.includes(token));
     }
 
     findDownloadTrigger(menu) {

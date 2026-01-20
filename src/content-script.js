@@ -9,12 +9,12 @@
   const MAX_INLINE_PILLS = 3;
   const MENU_CLICK_TIMEOUT = 4000;
   const MENU_POLL_INTERVAL = 250;
+  const CLIP_ROW_SELECTOR = '[data-testid="clip-row"]';
 
   class DownloadPillManager {
     constructor() {
       this.mutationObserver = null;
       this.injected = false;
-      this.shareScanHandle = null;
     }
 
     start() {
@@ -120,34 +120,44 @@
       if (this.mutationObserver) {
         return;
       }
-      this.mutationObserver = new MutationObserver(() => this.scheduleShareScan());
-      this.mutationObserver.observe(document.body, { childList: true, subtree: true });
-    }
-
-    scheduleShareScan() {
-      if (this.shareScanHandle) {
+      this.mutationObserver = new MutationObserver((records) => {
+        records.forEach((record) => {
+          record.addedNodes.forEach((node) => this.inspectNodeForClipRows(node));
+        });
+      });
+      const target = document.querySelector(CLIP_ROW_SELECTOR)?.parentElement || document.body;
+      if (!target) {
         return;
       }
-      const run = () => {
-        this.shareScanHandle = null;
-        this.scanForShareButtons();
-      };
-      if (window.requestIdleCallback) {
-        this.shareScanHandle = requestIdleCallback(run, { timeout: 500 });
-      } else {
-        this.shareScanHandle = setTimeout(run, 250);
+      this.mutationObserver.observe(target, { childList: true, subtree: true });
+    }
+
+    inspectNodeForClipRows(node) {
+      if (!node || node.nodeType !== Node.ELEMENT_NODE) {
+        return;
       }
+      const element = node;
+      if (element.matches && element.matches(CLIP_ROW_SELECTOR)) {
+        this.processClipRow(element);
+      }
+      const descendants = element.querySelectorAll
+        ? element.querySelectorAll(CLIP_ROW_SELECTOR)
+        : [];
+      descendants.forEach((row) => this.processClipRow(row));
     }
 
     scanForShareButtons() {
-      const shares = document.querySelectorAll(SHARE_BUTTON_SELECTOR);
-      shares.forEach((shareBtn) => {
-        if (shareBtn.hasAttribute(PROCESSED_ATTR)) {
-          return;
-        }
-        shareBtn.setAttribute(PROCESSED_ATTR, '1');
-        this.setupClipContext(shareBtn);
-      });
+      const rows = document.querySelectorAll(CLIP_ROW_SELECTOR);
+      rows.forEach((row) => this.processClipRow(row));
+    }
+
+    processClipRow(row) {
+      const shareBtn = row.querySelector(SHARE_BUTTON_SELECTOR);
+      if (!shareBtn || shareBtn.hasAttribute(PROCESSED_ATTR)) {
+        return;
+      }
+      shareBtn.setAttribute(PROCESSED_ATTR, '1');
+      this.setupClipContext(shareBtn);
     }
 
     setupClipContext(shareBtn) {
@@ -170,9 +180,8 @@
         error: null,
       };
 
-      this.renderFallback(context, 'Loading...');
       if (context.menuButton) {
-        this.scheduleOptionRefresh(context);
+        this.renderPlaceholder(context);
       } else {
         this.renderFallback(context, 'Menu button not found');
       }
@@ -189,7 +198,66 @@
       context.pillContainer.appendChild(pill);
     }
 
+    renderPlaceholder(context, { label = 'Download', disabled = false } = {}) {
+      context.pillContainer.innerHTML = '';
+      const pill = document.createElement('button');
+      pill.type = 'button';
+      pill.className = PILL_CLASS;
+      pill.textContent = label;
+      pill.disabled = disabled;
+      pill.setAttribute('aria-label', label);
+      pill.addEventListener('click', () => {
+        if (context.options.length) {
+          this.renderPills(context);
+        } else {
+          this.ensureOptions(context);
+        }
+      });
+      context.pillContainer.appendChild(pill);
+    }
+
+    ensureOptions(context) {
+      if (context.loading) {
+        return;
+      }
+      if (!context.menuButton) {
+        this.renderFallback(context, 'Menu button not found');
+        return;
+      }
+      if (context.options.length) {
+        this.renderPills(context);
+        return;
+      }
+      context.loading = true;
+      this.renderPlaceholder(context, { label: 'Loading…', disabled: true });
+      this.fetchDownloadOptions(context)
+        .then((options) => {
+          context.options = options;
+          this.renderPills(context);
+        })
+        .catch((error) => {
+          console.warn('Download pill introspection failed:', error);
+          context.error = error.message;
+          this.renderFallback(context, 'Download項目を取得できませんでした。Downloadから操作してください。');
+          this.showToast('Download項目を取得できませんでした。Downloadから操作してください。');
+        })
+        .finally(() => {
+          context.loading = false;
+          if (!context.options.length) {
+            this.renderPlaceholder(context, { label: 'Download' });
+          }
+        });
+    }
+
     findMenuButton(container, shareBtn) {
+      const contextButtons = Array.from(container.querySelectorAll('button[data-context-menu-trigger="true"]'));
+      const candidate = contextButtons.find((btn) => {
+        const label = (btn.getAttribute('aria-label') || '').toLowerCase();
+        return !label.includes('remix');
+      }) || contextButtons[0];
+      if (candidate) {
+        return candidate;
+      }
       const candidates = Array.from(container.querySelectorAll('button'));
       let fallback = null;
       for (const button of candidates) {
@@ -221,24 +289,7 @@
       return Boolean(elA.compareDocumentPosition(elB) & Node.DOCUMENT_POSITION_PRECEDING);
     }
 
-    scheduleOptionRefresh(context) {
-      if (context.loading) {
-        return;
-      }
-      context.loading = true;
-      this.collectDownloadOptions(context)
-        .catch((error) => {
-          console.warn('Download pill introspection failed:', error);
-          context.error = error.message;
-          this.renderFallback(context, 'Download項目を取得できませんでした。Downloadから操作してください。');
-          this.showToast('Download項目を取得できませんでした。Downloadから操作してください。');
-        })
-        .finally(() => {
-          context.loading = false;
-        });
-    }
-
-    async collectDownloadOptions(context) {
+    async fetchDownloadOptions(context) {
       if (!context.menuButton) {
         throw new Error('Menu button missing');
       }
@@ -262,8 +313,7 @@
         if (!options.length) {
           throw new Error('No download options were found');
         }
-        context.options = options;
-        this.renderPills(context);
+        return options;
       } finally {
         this.closeOpenMenus();
       }

@@ -2,9 +2,9 @@
 
 Adds a persistent set of Download pills to each clip card on https://suno.com/create so that the Download modal can be opened without hunting through the three-dot menu. The content script lives in `src/content-script.js` and follows the provided spec:
 
-- looks for the `button[aria-label="Share clip"]` anchor and injects a pill container immediately after it (within the existing action row).
-- automatically opens the clip menu, expands the Download submenu, and enumerates every format (MP3/WAV/Video/any future entries) so that pills always match the dynamic menu order.
-- renders up to three pills inline; remaining entries are grouped under `+N` with a lightweight popover; Pro-only items keep the Pro badge but remain clickable.
+- watches the clip list area (`[data-testid="clip-row"]`) and injects pills only when a new clip row appears, preventing the observer from reacting to unrelated DOM churn.
+- places a placeholder Download button next to the Share button; the first click on that placeholder opens the clip menu, expands the Download submenu, and enumerates every available format (MP3/WAV/Video/any future entries) so the real pills preserve the menu order from then on.
+- renders the fetched formats as up to three inline pills plus a `+N` overflow popover; Pro-only items keep the PRO badge but stay clickable.
 - falls back gracefully when Download options cannot be captured (disabled pill + toast message) and keeps the existing UI untouched.
 
 ## Usage
@@ -14,10 +14,10 @@ Adds a persistent set of Download pills to each clip card on https://suno.com/cr
 2. Firefox – install via the debugging UI:
    - Open `about:debugging#/runtime/this-firefox`, click “Load Temporary Add-on,” and select `manifest.json` from this repo.
    - The same manifest supports Firefox via `browser_specific_settings.gecko.id`.
-3. After either extension loads, the script automatically runs when the DOM is ready, adds the pill UI next to each Share button, and begins introspecting the Download submenu for each clip card.
-4. Clicking a pill replays the menu flow (open clip menu → expand Download → click the desired format), so the normal Download dialog appears without touching the menu yourself.
+3. After either extension loads, the script automatically runs when the DOM is ready and adds the placeholder Download buttons next to each Share button as clips render. The actual Download formats are retrieved the first time you click a placeholder, so the menu interaction happens on demand.
+4. Once the Download submenu is captured for a clip, clicking an individual pill replays the usual flow (open clip menu → expand Download → select format) so the normal Download dialog appears without manually reopening the three-dot menu yourself.
 
 ## Notes
 - This script works without depending on brittle class names or dataset attributes; it only relies on `aria-label` and visible text. If Suno changes those aria labels, adjust `SHARE_BUTTON_SELECTOR` and the trigger heuristics in `findMenuButton` accordingly.
-- There is no automated build/test step. To validate the behavior, visit `https://suno.com/create` after installing the extension and ensure the pills appear next to the Share button. Observe the toast message if Download items cannot be parsed.
+- There is no automated build/test step. To validate the behavior, visit `https://suno.com/create` after installing the extension and ensure the placeholder Download buttons appear next to each Share button. The download formats appear after you click the placeholder and the menu is successfully parsed; a toast still appears when the script fails to read the menu.
 - All styling is injected programmatically so there is no stylesheet to maintain. Tweak the style constants near the top of `src/content-script.js` if you need to align more closely with future UI changes.

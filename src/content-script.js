@@ -224,10 +224,20 @@
       const scopes = [clipRow, container].filter(Boolean);
       for (const scope of scopes) {
         const contextButtons = Array.from(scope.querySelectorAll('button[data-context-menu-trigger="true"]'));
-        const candidate = contextButtons.find((btn) => {
+        const candidates = contextButtons.filter((btn) => {
           const label = (btn.getAttribute('aria-label') || btn.textContent || '').toLowerCase();
           return !label.includes('remix') && !label.includes('edit');
-        }) || contextButtons[0];
+        });
+        const emptyLabel = candidates.find((btn) => {
+          const label = (btn.getAttribute('aria-label') || '').trim();
+          const text = (btn.textContent || '').trim();
+          return !label && !text;
+        });
+        const labeled = candidates.find((btn) => {
+          const label = (btn.getAttribute('aria-label') || btn.textContent || '').toLowerCase();
+          return label.includes('menu') || label.includes('more') || label.includes('options');
+        });
+        const candidate = emptyLabel || labeled || candidates[0];
         if (candidate) {
           return candidate;
         }
@@ -302,7 +312,11 @@
         indicator.textContent = 'PRO';
         button.appendChild(indicator);
       }
-      button.addEventListener('click', option.action);
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        option.action();
+      });
       return button;
     }
 
@@ -336,7 +350,9 @@
           const optButton = document.createElement('button');
           optButton.type = 'button';
           optButton.textContent = option.label + (option.isPro ? ' (Pro)' : '');
-          optButton.addEventListener('click', () => {
+          optButton.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
             option.action();
             closePopover();
           });
@@ -349,6 +365,7 @@
         document.addEventListener('click', clickAway);
       };
       button.addEventListener('click', (event) => {
+        event.preventDefault();
         event.stopPropagation();
         togglePopover();
       });
@@ -380,6 +397,7 @@
       });
       if (targetOption) {
         targetOption.click();
+        return;
       }
       this.closeOpenMenus();
     }

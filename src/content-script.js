@@ -71,7 +71,7 @@
           justify-content: center;
         }
         .${PILL_CONTAINER_CLASS} .${OVERFLOW_BUTTON_CLASS}::after {
-          content: '\00a0';
+          content: '\u00a0';
         }
         .suno-download-overflow-popover {
           position: absolute;
